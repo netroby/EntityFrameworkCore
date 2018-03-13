@@ -6131,6 +6131,77 @@ LEFT JOIN (
 ) AS [t0] ON ([t].[GearNickName] = [t0].[Nickname]) AND ([t].[GearSquadId] = [t0].[SquadId])");
         }
 
+        public override void Order_by_entity_qsre()
+        {
+            base.Order_by_entity_qsre();
+
+            AssertSql(
+                @"SELECT [f].[Name]
+FROM [Factions] AS [f]
+LEFT JOIN [Cities] AS [f.Capital] ON [f].[CapitalName] = [f.Capital].[Name]
+WHERE [f].[Discriminator] = N'LocustHorde'
+ORDER BY [f.Capital].[Name]");
+        }
+
+        public override void Order_by_entity_qsre_with_inheritance()
+        {
+            base.Order_by_entity_qsre_with_inheritance();
+
+            AssertSql(
+                @"SELECT [lc].[Name]
+FROM [LocustLeaders] AS [lc]
+INNER JOIN [LocustHighCommands] AS [lc.HighCommand] ON [lc].[HighCommandId] = [lc.HighCommand].[Id]
+WHERE [lc].[Discriminator] = N'LocustCommander'
+ORDER BY [lc.HighCommand].[Id]");
+        }
+
+        public override void Order_by_entity_qsre_composite_key()
+        {
+            base.Order_by_entity_qsre_composite_key();
+
+            AssertSql(
+                @"SELECT [w].[Name]
+FROM [Weapons] AS [w]
+LEFT JOIN (
+    SELECT [w.Owner].*
+    FROM [Gears] AS [w.Owner]
+    WHERE [w.Owner].[Discriminator] IN (N'Officer', N'Gear')
+) AS [t] ON [w].[OwnerFullName] = [t].[FullName]
+ORDER BY [t].[Nickname], [t].[SquadId]");
+        }
+
+        public override void Order_by_entity_qsre_with_other_orderbys()
+        {
+            base.Order_by_entity_qsre_with_other_orderbys();
+
+            AssertSql(
+                @"SELECT [w].[Id], [w].[AmmunitionType], [w].[IsAutomatic], [w].[Name], [w].[OwnerFullName], [w].[SynergyWithId]
+FROM [Weapons] AS [w]
+LEFT JOIN [Weapons] AS [w.SynergyWith] ON [w].[SynergyWithId] = [w.SynergyWith].[Id]
+LEFT JOIN (
+    SELECT [w.Owner].*
+    FROM [Gears] AS [w.Owner]
+    WHERE [w.Owner].[Discriminator] IN (N'Officer', N'Gear')
+) AS [t] ON [w].[OwnerFullName] = [t].[FullName]
+ORDER BY [w].[IsAutomatic], [t].[Nickname] DESC, [t].[SquadId] DESC, [w.SynergyWith].[Id], [w].[Name]");
+        }
+
+        public override void Join_on_entity_qsre_keys()
+        {
+            base.Join_on_entity_qsre_keys();
+
+            AssertSql(
+                @"");
+        }
+
+        public override void Join_on_entity_qsre_keys_inner_key_is_navigation()
+        {
+            base.Join_on_entity_qsre_keys_inner_key_is_navigation();
+
+            AssertSql(
+                @"");
+        }
+
         private void AssertSql(params string[] expected)
             => Fixture.TestSqlLoggerFactory.AssertBaseline(expected);
 

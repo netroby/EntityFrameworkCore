@@ -4365,6 +4365,71 @@ namespace Microsoft.EntityFrameworkCore.Query
                 elementSorter: e => e.c);
         }
 
+        [ConditionalFact]
+        public virtual void Order_by_entity_qsre()
+        {
+            AssertQuery<Gear>(
+                gs => gs.OrderBy(g => g.AssignedCity).Select(f => f.FullName),
+                gs => gs.OrderBy(g => Maybe(g.AssignedCity, () => g.AssignedCity.Name)).Select(f => f.FullName),
+                assertOrder: true);
+        }
+
+        [ConditionalFact]
+        public virtual void Order_by_entity_qsre_with_inheritance()
+        {
+            AssertQuery<LocustLeader>(
+                lls => lls.OfType<LocustCommander>().OrderBy(lc => lc.HighCommand).Select(lc => lc.Name),
+                assertOrder: true);
+        }
+
+        [ConditionalFact]
+        public virtual void Order_by_entity_qsre_composite_key()
+        {
+            AssertQuery<Weapon>(
+                ws => ws.OrderBy(w => w.Owner).Select(w => w.Name),
+                ws => ws.OrderBy(w => Maybe(w.Owner, () => w.Owner.Nickname)).ThenBy(w => MaybeScalar<int>(w.Owner, () => w.Owner.SquadId)).Select(w => w.Name),
+                assertOrder: true);
+        }
+
+        [ConditionalFact]
+        public virtual void Order_by_entity_qsre_with_other_orderbys()
+        {
+            AssertQuery<Weapon>(
+                ws => ws.OrderBy(w => w.IsAutomatic).ThenByDescending(w => w.Owner).ThenBy(w => w.SynergyWith).ThenBy(w => w.Name),
+                ws => ws
+                    .OrderBy(w => w.IsAutomatic)
+                    .ThenByDescending(w => Maybe(w.Owner, () => w.Owner.Nickname))
+                    .ThenByDescending(w => MaybeScalar<int>(w.Owner, () => w.Owner.SquadId))
+                    .ThenBy(w => MaybeScalar<int>(w.SynergyWith, () => w.SynergyWith.Id))
+                    .ThenBy(w => w.Name));
+        }
+
+        [ConditionalFact]
+        public virtual void Join_on_entity_qsre_keys()
+        {
+            using (var ctx = CreateContext())
+            {
+                var query = from w1 in ctx.Weapons
+                            join w2 in ctx.Weapons on w1.SynergyWith equals w2
+                            select new { Name1 = w1.Name, Name2 = w2.Name };
+
+                var result = query.ToList();
+            }
+        }
+
+        [ConditionalFact]
+        public virtual void Join_on_entity_qsre_keys_inner_key_is_navigation()
+        {
+            using (var ctx = CreateContext())
+            {
+                var query = from g1 in ctx.Gears
+                            join g2 in ctx.Gears on g1.AssignedCity equals g2.AssignedCity
+                            select new { Nickname1 = g1.Nickname, Nickname2 = g2.Nickname };
+
+                var result = query.ToList();
+            }
+        }
+
         // Remember to add any new tests to Async version of this test class
 
         protected GearsOfWarContext CreateContext() => Fixture.CreateContext();

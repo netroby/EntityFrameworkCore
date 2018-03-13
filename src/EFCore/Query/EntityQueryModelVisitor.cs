@@ -313,6 +313,8 @@ namespace Microsoft.EntityFrameworkCore.Query
 
             navigationRewritingExpressionVisitor.Rewrite(queryModel, parentQueryModel: null);
 
+            new EntityQsreToKeyAccessConvertingVisitor(QueryCompilationContext).VisitQueryModel(queryModel);
+
             includeCompiler.RewriteCollectionQueries();
 
             includeCompiler.LogIgnoredIncludes();
@@ -480,6 +482,76 @@ namespace Microsoft.EntityFrameworkCore.Query
 
                 base.VisitResultOperators(resultOperators, queryModel);
             }
+        }
+
+        private class EntityQsreToKeyAccessConvertingVisitor : QueryModelVisitorBase
+        {
+            private QueryCompilationContext _queryCompilationContext;
+
+            public EntityQsreToKeyAccessConvertingVisitor(QueryCompilationContext queryCompilationContext)
+            {
+                _queryCompilationContext = queryCompilationContext;
+            }
+
+            public override void VisitQueryModel(QueryModel queryModel)
+            {
+                queryModel.TransformExpressions(new TransformingQueryModelExpressionVisitor<EntityQsreToKeyAccessConvertingVisitor>(this).Visit);
+
+                base.VisitQueryModel(queryModel);
+            }
+
+            public override void VisitOrderByClause(OrderByClause orderByClause, QueryModel queryModel, int index)
+            {
+                var newOrderings = new List<Ordering>();
+
+                var changed = false;
+                foreach (var ordering in orderByClause.Orderings)
+                {
+                    if (ordering.Expression is QuerySourceReferenceExpression qsre
+                        && TryGetEntityPrimaryKeys(qsre.ReferencedQuerySource, out var keys))
+                    {
+                        changed = true;
+                        foreach (var key in keys)
+                        {
+                            newOrderings.Add(new Ordering(qsre.CreateEFPropertyExpression(key), ordering.OrderingDirection));
+                        }
+                    }
+                    else
+                    {
+                        newOrderings.Add(ordering);
+                    }
+                }
+
+                if (changed)
+                {
+                    orderByClause.Orderings.Clear();
+                    foreach (var newOrdering in newOrderings)
+                    {
+                        orderByClause.Orderings.Add(newOrdering);
+                    }
+                }
+
+                base.VisitOrderByClause(orderByClause, queryModel, index);
+            }
+
+            private bool TryGetEntityPrimaryKeys(IQuerySource querySource, out IReadOnlyList<IProperty> keyProperties)
+            {
+                var entityType
+                    = _queryCompilationContext.FindEntityType(querySource)
+                      ?? _queryCompilationContext.Model
+                          .FindEntityType(querySource.ItemType);
+
+                if (entityType != null)
+                {
+                    keyProperties = entityType.FindPrimaryKey().Properties;
+
+                    return true;
+                }
+
+                keyProperties = new List<IProperty>();
+
+                return false;
+           }
         }
 
         /// <summary>
